@@ -13,6 +13,9 @@
   <depend>fsm</depend>
   <depend>drone_lib</depend>
 
+  <build_depend>eigen3_cmake_module</build_depend>
+  <depend>Eigen3</depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
