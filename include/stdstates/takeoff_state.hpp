@@ -41,14 +41,20 @@ public:
         position_tolerance_ = *blackboard.get<float>("position_tolerance");
         float takeoff_height = *blackboard.get<float>("takeoff_height");
 
-        pos_ = drone_->getLocalPosition();
-        initial_yaw_ = drone_->getOrientation()[2];
-        goal_ = Eigen::Vector3d(pos_[0], pos_[1], takeoff_height);
-
         if (drone_->getArmingState() != DronePX4::ARMING_STATE::ARMED) {
             drone_->toOffboardSync();
             drone_->armSync();
         }
+
+        // setHomePosition must be called AFTER arming so that the PX4 EKF has had
+        // time to converge to the true heading. Calling it before (or not at all)
+        // leaves initial_yaw_=0 while the actual heading may differ, which causes
+        // an unexpected yaw rotation at the start of the first position setpoint.
+        drone_->setHomePosition(Eigen::Vector3d(0, 0, 0));
+
+        pos_ = drone_->getLocalPosition();
+        initial_yaw_ = drone_->getOrientation()[2];  // always 0 after setHomePosition
+        goal_ = Eigen::Vector3d(pos_[0], pos_[1], takeoff_height);
 
         print_counter_ = 0;
         drone_->log("Initial Yaw: " + std::to_string(initial_yaw_));
