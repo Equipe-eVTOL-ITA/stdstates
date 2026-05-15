@@ -89,7 +89,7 @@ public:
         float speed = std::abs(vy);
         if (speed < 0.1f) speed = 0.1f;
 
-        move_local_by_waypoint(drone_, target_pos, speed, 0.1f, target_yaw_);
+        move_local_constant_step(drone_, target_pos, speed, 0.1f, target_yaw_);
 
         return "";
     }
