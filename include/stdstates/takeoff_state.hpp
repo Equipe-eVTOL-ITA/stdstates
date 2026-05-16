@@ -7,6 +7,7 @@
 
 #include "fsm/fsm.hpp"
 #include "drone/Drone.hpp"
+#include "drone/movement.hpp"
 
 /**
  * @brief Standard takeoff state for FSM-based drone missions.
@@ -89,16 +90,7 @@ public:
             return "TAKEOFF COMPLETED";
         }
 
-        // Move toward goal with velocity clamping
-        Eigen::Vector3d little_goal = pos_ + (diff.norm() > max_velocity_
-                                              ? diff.normalized() * max_velocity_
-                                              : diff);
-
-        drone_->setLocalPosition(
-            little_goal.x(),
-            little_goal.y(),
-            little_goal.z(),
-            initial_yaw_);
+        move_local_constant_step(drone_, goal_, max_velocity_, position_tolerance_, initial_yaw_);
 
         return "";
     }
