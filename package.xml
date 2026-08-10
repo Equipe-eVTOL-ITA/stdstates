@@ -14,7 +14,12 @@
   <depend>drone_lib</depend>
 
   <build_depend>eigen3_cmake_module</build_depend>
-  <depend>Eigen3</depend>
+  <!-- Chave do ROSDEP, nao o nome do pacote CMake. `Eigen3` nao existe no
+       indice do rosdep; o `rosdep install` falhava com "Cannot locate rosdep
+       definition for [Eigen3]" e o Eigen so aparecia por vir de carona com o
+       ros-desktop. O find_package(Eigen3) do CMakeLists continua igual: sao
+       espacos de nomes diferentes. -->
+  <depend>eigen</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
