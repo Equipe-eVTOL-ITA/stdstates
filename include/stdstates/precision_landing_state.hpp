@@ -16,8 +16,10 @@
 //
 //   entrada  "landing_velocity_max"  float   (positivo, m/s, descida)
 //            "landing_velocity_min"  float
-//            "align_height"          float   (FRD, NEGATIVO — altura de onde desce)
 //            "max_base_height"       float   (FRD, NEGATIVO — topo mais alto possível)
+//
+// A altura de PARTIDA não é parâmetro: é medida no momento de entrar no estado.
+// Ver o comentário no on_enter. `align_height` não é mais lido.
 //
 // Outcomes: ""        (descendo)
 //           "LANDED"  (tempo de pouso esgotado)
@@ -62,45 +64,68 @@ public:
     if (!stdstates::require(blackboard, drone_, "landing_velocity_max", v_max_)) return;
     if (!stdstates::require(blackboard, drone_, "landing_velocity_min", v_min_)) return;
 
-    float align_height = 0.0f, max_base_height = 0.0f;
-    if (!stdstates::require(blackboard, drone_, "align_height", align_height)) return;
+    float max_base_height = 0.0f;
     if (!stdstates::require(blackboard, drone_, "max_base_height", max_base_height)) return;
 
-    // As alturas vêm em FRD (negativas para cima do solo). A conta é feita em
-    // distâncias positivas.
-    const float queda = -align_height - (-max_base_height);
+    // ALTURA DE PARTIDA: SEMPRE a atual, medida agora.
+    //
+    // A primeira versão deste estado lia `align_height` da blackboard, porque
+    // foi portada da fase 1, onde o alinhamento sempre leva o drone à mesma
+    // altitude antes de pousar. Lá o valor de config e a altura real quase
+    // coincidem — mas nem lá são iguais, porque o alinhamento já desce um pouco
+    // enquanto converge.
+    //
+    // Em geral não coincidem nem de longe. Na fase 3 o drone pousa de onde o
+    // operador o deixou por gesto, que é qualquer altura. Um valor fixo faria o
+    // perfil ser calculado para uma queda que não existe: curto demais, o drone
+    // chega ao solo ainda rápido; longo demais, fica parado no ar esperando um
+    // tempo que não passa.
+    //
+    // A versão da fase 3 de 2025 já media a altura atual, e está certa. Não há
+    // override: um parâmetro que quase sempre deve ser ignorado é um convite a
+    // ser configurado errado. `align_height` deixa de ser lido aqui.
+    const float altura_atual = -static_cast<float>(drone_->getLocalPosition().z());
+    const float altura_alvo = -max_base_height;   // FRD negativo -> distância
 
-    // GUARDAS QUE 2025 NÃO TINHA. Sem elas, um YAML com align_height igual a
-    // max_base_height divide por zero e produz tau = inf; um v_min de 0
-    // produz log(inf) no cálculo do tempo. Nos dois casos o drone desce com
-    // velocidade NaN, que o PX4 rejeita silenciosamente — ele simplesmente
-    // fica parado no ar até alguém desistir e desarmar.
+    // GUARDAS QUE 2025 NÃO TINHA. Sem elas, uma queda nula divide por zero e
+    // produz tau = inf; um v_min de 0 produz log(inf). Nos dois casos o drone
+    // desce com velocidade NaN, que o PX4 rejeita silenciosamente — ele
+    // simplesmente fica parado no ar até alguém desistir e desarmar.
     if (v_min_ <= 0.0f || v_max_ <= v_min_) {
       drone_->log(
         "ERRO: velocidades de pouso incoerentes (max=" + std::to_string(v_max_) +
         ", min=" + std::to_string(v_min_) + "). Exige-se 0 < min < max.");
       return;
     }
-    if (queda <= 0.0f) {
-      drone_->log(
-        "ERRO: align_height deve estar ACIMA de max_base_height (queda=" +
-        std::to_string(queda) + " m). Ambos sao negativos em FRD.");
-      return;
-    }
 
-    decay_rate_ = (v_max_ - v_min_) / queda;                       // 1/s
-    const double t_ate_v_min = std::log(v_max_ / v_min_) / decay_rate_;
-    const double t_total = t_ate_v_min + (-max_base_height) / v_min_;
-    timeout_s_ = t_total + kMargemSegurancaS;
+    const float queda = altura_atual - altura_alvo;
+
+    if (queda <= 0.0f) {
+      // O drone já está na altura do alvo ou abaixo dela. Não é erro: com
+      // controle por gesto o operador pode muito bem descer até quase encostar
+      // e só então mandar pousar. Abortar aqui deixaria o drone pairando a
+      // 20 cm do chão sem explicação.
+      //
+      // Desce devagar, com tempo suficiente para vencer a distância que resta.
+      decay_rate_ = 1.0f;                       // irrelevante: já saturado em v_min
+      timeout_s_ = altura_atual / v_min_ + kMargemSegurancaS;
+      drone_->log(
+        "Ja abaixo da altura de base (" + std::to_string(altura_atual) +
+        " m); descendo direto a " + std::to_string(v_min_) + " m/s.");
+    } else {
+      decay_rate_ = (v_max_ - v_min_) / queda;                       // 1/s
+      const double t_ate_v_min = std::log(v_max_ / v_min_) / decay_rate_;
+      const double t_total = t_ate_v_min + altura_alvo / v_min_;
+      timeout_s_ = t_total + kMargemSegurancaS;
+    }
 
     start_time_ = std::chrono::steady_clock::now();
 
     drone_->log(
-      "Descida: " + std::to_string(queda) + " m, tau=" +
-      std::to_string(1.0f / decay_rate_) + " s");
-    drone_->log(
-      "Tempo previsto de pouso: " + std::to_string(t_total) +
-      " s (timeout " + std::to_string(timeout_s_) + " s)");
+      "Pouso de " + std::to_string(altura_atual) + " m ate " +
+      std::to_string(altura_alvo) + " m; tau=" +
+      std::to_string(1.0f / decay_rate_) + " s, timeout " +
+      std::to_string(timeout_s_) + " s");
 
     ok_ = true;
   }
