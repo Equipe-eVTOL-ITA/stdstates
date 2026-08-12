@@ -31,6 +31,24 @@ ament_export_dependencies(rclcpp Eigen3 fsm drone_lib)
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  # ---------------------------------------------------------------------------
+  # Teste de compilacao dos estados.
+  #
+  # Este pacote e header-only: sem um consumidor, `colcon build` termina em um
+  # segundo sem COMPILAR nenhum header -- so os copia para o install. Erro de
+  # sintaxe, include faltando ou assinatura fora do contrato do fsm::State
+  # passariam pelo CI intactos e so apareceriam quando uma missao usasse o
+  # estado.
+  #
+  # Este alvo e o consumidor que forca a instanciacao.
+  # ---------------------------------------------------------------------------
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_compila_estados test/test_compila_estados.cpp)
+  if(TARGET test_compila_estados)
+    target_include_directories(test_compila_estados PRIVATE include)
+    ament_target_dependencies(test_compila_estados rclcpp Eigen3 fsm drone_lib)
+  endif()
 endif()
 
 ament_package()
