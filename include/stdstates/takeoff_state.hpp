@@ -29,7 +29,12 @@
  */
 class TakeoffState : public fsm::State {
 public:
-    TakeoffState() : fsm::State() {}
+    /// @param set_home  Se true, reancora o referencial FRD na posicao atual
+    ///                   ao entrar no estado. Verdadeiro para a decolagem
+    ///                   INICIAL da missao; FALSO para qualquer redecolagem.
+    ///                   Ver o comentario extenso no on_enter.
+    explicit TakeoffState(bool set_home = true)
+    : fsm::State(), set_home_(set_home) {}
 
     void on_enter(fsm::Blackboard &blackboard) override {
         drone_ = *blackboard.get<std::shared_ptr<Drone>>("drone");
@@ -47,14 +52,38 @@ public:
             drone_->armSync();
         }
 
-        // setHomePosition must be called AFTER arming so that the PX4 EKF has had
-        // time to converge to the true heading. Calling it before (or not at all)
-        // leaves initial_yaw_=0 while the actual heading may differ, which causes
-        // an unexpected yaw rotation at the start of the first position setpoint.
-        drone_->setHomePosition(Eigen::Vector3d(0, 0, 0));
+        // setHomePosition REANCORA O REFERENCIAL DO MUNDO na posicao e no yaw
+        // atuais do drone: ela grava ned_home_position_ = posicao NED de agora,
+        // e todo getLocalPosition() posterior passa a ser medido a partir dali.
+        //
+        // Isso e o que se quer na decolagem INICIAL -- e preciso chama-la depois
+        // de armar, para que o EKF do PX4 ja tenha convergido para o heading
+        // verdadeiro; chamar antes deixa initial_yaw_ em 0 enquanto o heading
+        // real e outro, e o primeiro setpoint de posicao produz uma guinada
+        // inesperada.
+        //
+        // Mas e DESTRUTIVO em qualquer redecolagem no meio da missao. Uma FSM
+        // que pousa e redecola (varrer uma arena pousando em varias bases, por
+        // exemplo) volta a este estado, e a origem do mundo pula para a base
+        // recem-visitada. Tudo o que estava guardado em coordenadas de mundo --
+        // a lista de bases ja visitadas, a grade de varredura, a posicao de casa
+        // -- passa a se referir a um referencial que nao existe mais.
+        //
+        // Nao ha erro. O drone decola, olha para baixo, ve a base em que acabou
+        // de pousar, nao a reconhece porque as coordenadas guardadas viraram
+        // outra coisa, e pousa nela de novo. E de novo.
+        //
+        // Medido em SITL: o NED cru do PX4 ficou em (3.417, -0.159) durante todo
+        // o ciclo -- o drone nunca saiu do lugar -- enquanto o FRD visto pela
+        // missao saltava de (-0.16, -3.03) para (0.00, 0.03) a cada redecolagem.
+        if (set_home_) {
+            drone_->setHomePosition(Eigen::Vector3d(0, 0, 0));
+        }
 
         pos_ = drone_->getLocalPosition();
-        initial_yaw_ = drone_->getOrientation()[2];  // always 0 after setHomePosition
+        // Zero logo apos setHomePosition; na redecolagem e o yaw acumulado
+        // desde a decolagem inicial, que e justamente o que se quer preservar.
+        initial_yaw_ = drone_->getOrientation()[2];
         goal_ = Eigen::Vector3d(pos_[0], pos_[1], takeoff_height);
 
         print_counter_ = 0;
@@ -96,6 +125,7 @@ public:
     }
 
 private:
+    bool set_home_;
     std::shared_ptr<Drone> drone_;
     Eigen::Vector3d pos_, goal_;
     float max_velocity_;

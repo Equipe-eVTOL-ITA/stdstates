@@ -27,6 +27,7 @@
 #include "stdstates/precision_align_state.hpp"
 #include "stdstates/precision_landing_state.hpp"
 #include "stdstates/return_home_state.hpp"
+#include "stdstates/takeoff_state.hpp"
 
 // --- a interface exigida pela FSM -------------------------------------------
 
@@ -104,4 +105,51 @@ TEST(ArenaPoint, NasceNaoVisitado)
 
   ArenaPoint padrao{Eigen::Vector3d::Zero(), false};
   EXPECT_FALSE(padrao.is_visited);
+}
+
+// --- TakeoffState: reancoragem do referencial -------------------------------
+
+TEST(TakeoffState, AceitaAsDuasFormasDeConstrucao)
+{
+  // A forma sem argumento reancora o referencial do mundo, como sempre fez.
+  // Missoes que so decolam uma vez continuam valendo sem mudanca.
+  TakeoffState inicial;
+
+  // A forma explicita e para REDECOLAGEM no meio da missao, onde reancorar
+  // destruiria as coordenadas ja guardadas.
+  TakeoffState inicial_explicito(true);
+  TakeoffState redecolagem(false);
+
+  // Precisam caber num unique_ptr<fsm::State>, que e como a FSM os guarda.
+  std::vector<std::unique_ptr<fsm::State>> estados;
+  estados.push_back(std::make_unique<TakeoffState>());
+  estados.push_back(std::make_unique<TakeoffState>(false));
+  EXPECT_EQ(estados.size(), 2u);
+}
+
+TEST(TakeoffState, OPadraoReancora)
+{
+  // Este teste existe para travar o PADRAO, nao o comportamento em voo.
+  //
+  // `TakeoffState()` tem de continuar reancorando, porque e o que as missoes
+  // existentes esperam e o que a decolagem inicial precisa. Se alguem inverter
+  // o padrao para "nao reancorar", a decolagem inicial passa a herdar um
+  // referencial antigo -- e o sintoma seria o drone voando para coordenadas
+  // deslocadas, sem nenhum erro.
+  //
+  // A checagem e feita pelo construtor de copia do default: se o padrao mudar
+  // para false, a linha abaixo deixa de compilar identica a TakeoffState(true).
+  static_assert(
+    std::is_constructible<TakeoffState>::value,
+    "TakeoffState precisa ser construivel sem argumento");
+  static_assert(
+    std::is_constructible<TakeoffState, bool>::value,
+    "TakeoffState precisa aceitar o flag set_home");
+
+  // O construtor e explicit: `TakeoffState t = false;` nao deve compilar.
+  static_assert(
+    !std::is_convertible<bool, TakeoffState>::value,
+    "o construtor deve ser explicit, para nao aceitar conversao implicita");
+
+  SUCCEED();
 }
