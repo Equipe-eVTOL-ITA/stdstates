@@ -90,6 +90,25 @@ jobs:
             --event-handlers console_direct+ \
             --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
+      # -----------------------------------------------------------------------
+      # Os testes BLOQUEIAM.
+      #
+      # Este pacote e header-only: sem um consumidor que instancie os estados,
+      # `colcon build` termina em ~1 s sem compilar um unico header, e o CI
+      # verde nao significa nada. O test_compila_estados e esse consumidor.
+      #
+      # Nos dois distros porque o contrato do fsm::State e as versoes de Eigen
+      # diferem entre Humble e Jazzy.
+      # -----------------------------------------------------------------------
+      - name: Testar
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          pkgs=$(colcon list --names-only --base-paths "src/${{ github.event.repository.name }}" | tr '\n' ' ')
+          colcon test --packages-select $pkgs --event-handlers console_direct+ \
+            --ctest-args -R test_compila_estados
+          colcon test-result --verbose
+
   # ---------------------------------------------------------------------------
   # Lint — informativo, não bloqueia.
   #
