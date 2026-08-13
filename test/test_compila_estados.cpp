@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "fsm/fsm.hpp"
+#include "drone/movement.hpp"
 
 #include "stdstates/arena_point.hpp"
 #include "stdstates/blackboard_params.hpp"
@@ -28,6 +29,8 @@
 #include "stdstates/precision_landing_state.hpp"
 #include "stdstates/return_home_state.hpp"
 #include "stdstates/takeoff_state.hpp"
+#include "stdstates/yaw_sweep_state.hpp"
+#include "stdstates/land_and_disarm_state.hpp"
 
 // --- a interface exigida pela FSM -------------------------------------------
 
@@ -152,4 +155,53 @@ TEST(TakeoffState, OPadraoReancora)
     "o construtor deve ser explicit, para nao aceitar conversao implicita");
 
   SUCCEED();
+}
+
+// --- Estados novos da fase 3 -------------------------------------------------
+
+TEST(Compilacao, EstadosDaFase3SaoConstruiveis)
+{
+  std::vector<std::unique_ptr<fsm::State>> estados;
+  estados.push_back(std::make_unique<YawSweepState>());
+  estados.push_back(std::make_unique<LandAndDisarmState>());
+  EXPECT_EQ(estados.size(), 2u);
+}
+
+TEST(YawSweep, DiferencaNormalizadaResolveADescontinuidade)
+{
+  // Este teste NAO exercita o estado (precisaria de um Drone). Ele trava a
+  // propriedade matematica de que o estado depende, e que a versao de 2025 nao
+  // tinha: comparar a diferenca normalizada em vez de limites absolutos.
+  //
+  // O caso concreto que quebrava: drone entrando no varrimento olhando para
+  // 2.6 rad com abertura de 1.05 rad. O limite superior absoluto seria 3.65,
+  // um valor que o yaw -- que vive em (-pi, pi] -- nunca atinge.
+  const float centro = 2.6f;
+  const float range = 1.0472f;
+
+  // Limite superior "absoluto" da versao antiga: inalcancavel.
+  EXPECT_GT(centro + range, static_cast<float>(M_PI))
+    << "o caso so e interessante se o limite passar de pi";
+
+  // Ja a diferenca normalizada funciona: um yaw que deu a volta (-3.0 rad)
+  // esta a pouco mais de meio radiano do centro, e nao a 5.6.
+  const float yaw_apos_a_volta = -3.0f;
+  const float desvio = normalizeYawError(yaw_apos_a_volta - centro);
+
+  EXPECT_LT(std::abs(desvio), static_cast<float>(M_PI));
+  EXPECT_NEAR(desvio, 0.6831853f, 1e-4f)
+    << "menor angulo entre 2.6 e -3.0, passando por pi";
+
+  // E o criterio de inversao nao dispara, porque ainda esta dentro do setor.
+  EXPECT_LT(desvio, range);
+}
+
+TEST(YawSweep, InverteNosDoisExtremosDoSetor)
+{
+  const float centro = 0.0f;
+  const float range = 1.0f;
+
+  EXPECT_GE(normalizeYawError(1.1f - centro), range) << "passou do extremo +";
+  EXPECT_LE(normalizeYawError(-1.1f - centro), -range) << "passou do extremo -";
+  EXPECT_LT(std::abs(normalizeYawError(0.5f - centro)), range) << "dentro do setor";
 }
