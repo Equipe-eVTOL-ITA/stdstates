@@ -98,8 +98,7 @@ public:
       "Casa a " + std::to_string(distancia) + " m; timeout " +
       std::to_string(timeout_s_) + " s");
 
-    // COMO voltar e escolha da missao. O padrao reproduz o que este estado
-    // fazia antes; `motion_policy: axial` faz o drone girar e so entao avancar.
+    // COMO voltar e escolha da missao: ver stdstates/motion.hpp.
     politica_ = stdstates::criarPolitica(blackboard, drone_);
     if (politica_ == nullptr) {return;}
     limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
@@ -133,8 +132,7 @@ public:
 
       if (diff.norm() < tolerance_) {
         over_home_ = true;
-        // A politica recomeca: a fase 2 e um destino novo, e uma politica
-        // axial precisa reavaliar a proa antes de descer.
+        // Destino novo: a politica axial precisa reavaliar a proa.
         politica_->iniciar(goal_, yaw_);
         drone_->log("Sobre a casa; iniciando descida.");
         return "";

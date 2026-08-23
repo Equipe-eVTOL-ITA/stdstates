@@ -1,38 +1,18 @@
 #pragma once
 
-// PrecisionLandingState — pousa usando a abordagem escolhida no YAML.
+// PrecisionLandingState — a casca: le `landing_mode` da blackboard, cria a
+// estrategia e delega. A matematica esta em landing/.
 //
-// Este estado era a descida exponencial. Agora ele e a CASCA: le
-// `landing_mode` da blackboard, cria a estrategia correspondente e delega.
-// A matematica exponencial esta em landing/exponencial.hpp, movida para la sem
-// mudanca nenhuma de comportamento.
+// O nome da classe nao muda: e com ele que o stdbt registra o estado na fabrica
+// da Behavior Tree, e ele aparece nos XML das arvores de outro repositorio.
 //
-// POR QUE O NOME DA CLASSE NAO MUDOU
+//   opcional  "landing_mode"  std::string  exponencial (padrao) | px4 | s_curve
+//   os demais parametros dependem do modo -- ver cada header em landing/
 //
-// `PrecisionLanding` e o nome com que o stdbt registra este estado na fabrica
-// da Behavior Tree, e ele aparece nos XML das arvores -- que estao em outro
-// repositorio. Um nome melhor nao vale quebrar toda arvore existente.
+// Outcomes: "" / "LANDED" / "ERROR". Vocabulario fixo; ver estrategia.hpp.
 //
-// Contrato com a blackboard:
-//
-//   opcional  "landing_mode"  std::string  "exponencial" (padrao) | "px4" | "s_curve"
-//
-//   Os demais parametros dependem do modo; cada header em landing/ documenta
-//   os seus. O modo padrao continua lendo landing_velocity_max/min e
-//   max_base_height, como sempre leu.
-//
-// Outcomes: ""        (descendo)
-//           "LANDED"  (pouso concluido)
-//           "ERROR"   (parametro ausente, incoerente, ou modo desconhecido)
-//
-// O vocabulario e FIXO, e nenhuma estrategia pode ampliá-lo: a fsm::FSM lanca
-// excecao em outcome que nao esteja nas transicoes do estado, e uma troca de
-// linha no YAML nao pode derrubar a missao em voo. Ver landing/estrategia.hpp.
-//
-// O que NAO vem para ca: em 2025 o `on_exit` deste estado registrava a base na
-// lista, contava quantas faltavam e escrevia "finished_bases" na blackboard.
-// Isso e contabilidade da fase 1 -- um estado generico de pouso nao pode saber
-// o que e uma "base". A missao faz isso no seu proprio estado seguinte.
+// Nao faz contabilidade de base: um estado generico de pouso nao sabe o que e
+// uma "base". A missao faz isso no estado seguinte.
 
 #include <chrono>
 #include <memory>
@@ -51,11 +31,8 @@ public:
   PrecisionLandingState()
   : fsm::State() {}
 
-  /// Fixa a abordagem no codigo, ignorando o `landing_mode` do YAML.
-  ///
-  /// Existe para o caso em que a escolha e da MISSAO, e nao de quem configura:
-  /// uma fase cuja regra exige um pouso especifico nao deveria poder ser
-  /// desconfigurada por engano. Sem argumento, o YAML manda.
+  /// Fixa a abordagem no codigo, ignorando o YAML -- para a fase cuja regra
+  /// exige um pouso especifico. Sem argumento, o YAML manda.
   explicit PrecisionLandingState(std::string modo_fixo)
   : fsm::State(), modo_fixo_(std::move(modo_fixo)) {}
 
@@ -99,12 +76,8 @@ public:
     (void)blackboard;
     if (estrategia_ == nullptr) {return "ERROR";}
 
-    // Em SEGUNDOS FRACIONARIOS. O codigo de 2025 usava
-    // `duration_cast<std::chrono::seconds>`, que TRUNCA para inteiro: a
-    // velocidade so mudava uma vez por segundo, o que a 20 Hz significa vinte
-    // comandos identicos seguidos de um degrau. A descida "exponencial" era na
-    // verdade uma escada, e o solavanco a cada degrau e exatamente o tipo de
-    // coisa que se confunde com problema de sintonia do controlador.
+    // Em segundos FRACIONARIOS: truncar para inteiro fazia da exponencial uma
+    // escada de um degrau por segundo.
     const std::chrono::duration<double> elapsed =
       std::chrono::steady_clock::now() - start_time_;
 
@@ -114,10 +87,7 @@ public:
   void on_exit(fsm::Blackboard & blackboard) override
   {
     (void)blackboard;
-    // Roda por qualquer caminho de saida, inclusive quando a missao aborta o
-    // pouso. Cada estrategia sabe como parar: as que descem por setpoint zeram
-    // a velocidade, e a do PX4 nao publica nada -- um setpoint depois do LAND
-    // disputaria o controle com o firmware a centimetros do chao.
+    // Roda por qualquer caminho de saida. Cada estrategia sabe como parar.
     if (estrategia_ != nullptr && drone_ != nullptr) {
       estrategia_->encerrar(drone_);
     }

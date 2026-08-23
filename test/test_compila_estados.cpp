@@ -69,8 +69,7 @@ TEST(BlackboardParams, RequireFalhaEmVezDeExplodirComChaveAusente)
   fsm::Blackboard bb;
   float destino = -1.0f;
 
-  // O ponto todo do helper: uma chave ausente devolve false. O idioma que ele
-  // substitui — `*bb.get<float>("nao_existe")` — seria dereference de nullptr.
+  // Chave ausente devolve false; `*bb.get<float>(...)` seria deref de nullptr.
   const bool achou = stdstates::require(bb, nullptr, "nao_existe", destino);
 
   EXPECT_FALSE(achou);
@@ -98,9 +97,8 @@ TEST(BlackboardParams, OptionalUsaOPadraoQuandoFalta)
 
 TEST(BlackboardParams, SampleTimeDosPidsFolgaSobreOTimerDaFsm)
 {
-  // A FSM roda a 20 Hz (50 ms). PidController::compute() devolve 0.0f quando
-  // chamado antes de sample_time. Se os dois forem iguais, o jitter produz
-  // zeros intermitentes no controle. Este teste trava a folga.
+  // A 20 Hz, sample_time igual ao periodo faz o jitter produzir zeros
+  // intermitentes no controle. Este teste trava a folga.
   constexpr float periodo_da_fsm = 0.05f;
   EXPECT_LT(stdstates::kPidSampleTime, periodo_da_fsm)
     << "sample_time do PID precisa ser menor que o periodo do timer da FSM";
@@ -214,18 +212,14 @@ TEST(YawSweep, InverteNosDoisExtremosDoSetor)
 
 // --- Modos de pouso ---------------------------------------------------------
 //
-// A escolha da abordagem de pouso passou a ser um valor de YAML
-// (`landing_mode`). Isso e conveniente e e perigoso pela mesma razao: um
-// arquivo de configuracao ganhou poder sobre o que o drone faz a poucos metros
-// do chao. Os testes abaixo trancam as duas pontas -- todo modo anunciado
-// existe de fato, e um modo inventado falha ALTO, e nao em silencio.
+// Um arquivo de configuracao ganhou poder sobre o que o drone faz a poucos
+// metros do chao. Os testes trancam as duas pontas: todo modo anunciado existe,
+// e um modo inventado falha alto.
 
 TEST(ModosDePouso, TodoModoAnunciadoPodeSerConstruido)
 {
-  // A lista de `modos()` e o que a mensagem de erro oferece a quem digitou
-  // errado. Se ela anunciar um modo que o `criar()` nao sabe fazer, a
-  // mensagem manda a pessoa -- com o drone armado esperando -- para um nome
-  // que tambem nao funciona.
+  // A lista alimenta a mensagem de erro: anunciar um modo que criar() nao sabe
+  // fazer mandaria a pessoa para outro nome que tambem nao funciona.
   const auto nomes = stdstates::landing::modos();
   ASSERT_FALSE(nomes.empty());
 
@@ -241,9 +235,7 @@ TEST(ModosDePouso, TodoModoAnunciadoPodeSerConstruido)
 
 TEST(ModosDePouso, ModoDesconhecidoDevolveNullptrEmVezDeUmPadraoSilencioso)
 {
-  // Cair no padrao quando o nome esta errado seria o pior desfecho: a missao
-  // pousaria de um jeito que ninguem pediu, e o YAML continuaria dizendo outra
-  // coisa. Melhor recusar e deixar o estado devolver ERROR.
+  // Cair no padrao faria a missao pousar de um jeito que ninguem pediu.
   EXPECT_EQ(stdstates::landing::criar("exponencia"), nullptr);
   EXPECT_EQ(stdstates::landing::criar(""), nullptr);
   EXPECT_EQ(stdstates::landing::criar("LAND"), nullptr);
@@ -251,9 +243,7 @@ TEST(ModosDePouso, ModoDesconhecidoDevolveNullptrEmVezDeUmPadraoSilencioso)
 
 TEST(ModosDePouso, OPadraoEAExponencial)
 {
-  // Uma missao que nao declara `landing_mode` tem de pousar exatamente como
-  // pousava antes desta camada existir. Mudar este padrao mudaria o
-  // comportamento de todas as missoes de uma vez.
+  // Quem nao declara `landing_mode` pousa como antes desta camada.
   auto e = stdstates::landing::criar(stdstates::landing::kModoPadrao);
   ASSERT_NE(e, nullptr);
   EXPECT_STREQ(e->nome(), "exponencial");
@@ -261,11 +251,8 @@ TEST(ModosDePouso, OPadraoEAExponencial)
 
 TEST(ModosDePouso, AlturaDaBaseAceitaOsDoisSinais)
 {
-  // A convencao e FRD (para cima e negativo), e metade do workspace escreve
-  // positivo: cbr2026/fase1 e fase3 usam -1.5 e -0.2, enquanto fase4, sae2026,
-  // ensaio_em_voo e o gerador de missoes usam 0.5. Os dois tem de dar a mesma
-  // distancia, ou o perfil de descida e calculado para uma queda que nao e a
-  // real -- sem erro nenhum aparecer.
+  // Metade do workspace escreve o sinal ao contrario da convencao FRD. Os dois
+  // tem de dar a mesma distancia, ou o perfil e calculado para outra queda.
   EXPECT_FLOAT_EQ(stdstates::landing::alturaDaBase(-1.5f, nullptr), 1.5f);
   EXPECT_FLOAT_EQ(stdstates::landing::alturaDaBase(0.5f, nullptr), 0.5f);
   EXPECT_FLOAT_EQ(stdstates::landing::alturaDaBase(0.0f, nullptr), 0.0f);
@@ -273,9 +260,8 @@ TEST(ModosDePouso, AlturaDaBaseAceitaOsDoisSinais)
 
 TEST(ModosDePouso, LandingStateEPrecisionLandingSaoAMesmaImplementacao)
 {
-  // Eram duas descidas exponenciais lendo as mesmas chaves e fazendo a mesma
-  // conta; a diferenca era um bug de truncamento no tempo, que sobreviveu a
-  // propria correcao porque havia duas copias.
+  // Eram duas copias da mesma conta, e o bug de truncamento sobreviveu a
+  // propria correcao por causa disso.
   static_assert(
     std::is_base_of<PrecisionLandingState, LandingState>::value,
     "LandingState precisa continuar sendo o PrecisionLandingState");
@@ -294,9 +280,7 @@ TEST(ModosDePouso, LandingStateEPrecisionLandingSaoAMesmaImplementacao)
 
 TEST(PoliticaDeMovimento, PadraoQuandoAChaveNaoExiste)
 {
-  // Uma missao que nao declara `motion_policy` tem de continuar voando como
-  // voava. O padrao e a holonomica -- o comportamento que todo estado tinha
-  // antes desta camada existir.
+  // Quem nao declara `motion_policy` voa como antes desta camada.
   fsm::Blackboard bb;
   auto p = stdstates::criarPolitica(bb, nullptr);
   ASSERT_NE(p, nullptr);
@@ -316,9 +300,7 @@ TEST(PoliticaDeMovimento, LeAChaveDaBlackboard)
 
 TEST(PoliticaDeMovimento, NomeInvalidoDevolveNullptrParaOEstadoDarErro)
 {
-  // Cair no padrao com um nome errado seria o pior desfecho: o drone voaria
-  // holonomico enquanto o YAML diz `axial`, e no dia em que a regra for "so
-  // pode girar e ir para frente" ninguem descobriria ate ver o voo.
+  // Cair no padrao faria o drone voar holonomico com o YAML dizendo axial.
   fsm::Blackboard bb;
   bb.set<std::string>("motion_policy", std::string("axail"));
   EXPECT_EQ(stdstates::criarPolitica(bb, nullptr), nullptr);
@@ -332,16 +314,14 @@ TEST(PoliticaDeMovimento, LimitesSaemDoYamlComOsNomesDeSempre)
   const auto lim = stdstates::limitesDaBlackboard(bb, 0.25f);
   EXPECT_FLOAT_EQ(lim.passo, 0.8f);
   EXPECT_FLOAT_EQ(lim.posicao, 0.25f);
-  // A tolerancia de guinada tem padrao: nenhuma missao a declara hoje, e
-  // exigi-la quebraria todos os YAML existentes de uma vez.
+  // Tem padrao: exigi-la quebraria todos os YAML existentes.
   EXPECT_GT(lim.yaw, 0.0);
 }
 
 TEST(PoliticaDeMovimento, OsEstadosQueSeDeslocamAExigem)
 {
-  // Se algum destes deixar de compilar com a politica, e porque alguem voltou
-  // a comandar deslocamento direto -- e o "um lugar so para mexer" deixou de
-  // valer sem ninguem notar.
+  // Se algum deixar de compilar com a politica, alguem voltou a comandar
+  // deslocamento direto.
   std::vector<std::unique_ptr<fsm::State>> estados;
   estados.push_back(std::make_unique<WaypointListState>());
   estados.push_back(std::make_unique<ReturnHomeState>());

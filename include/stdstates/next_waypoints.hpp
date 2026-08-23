@@ -74,9 +74,7 @@ public:
     yaw_ = stdstates::optional<float>(
       blackboard, "waypoint_yaw", static_cast<float>(drone_->getOrientation()[2]));
 
-    // COMO o drone vai de um waypoint ao outro e escolha da missao, e nao
-    // deste estado. O padrao reproduz exatamente o que este codigo fazia
-    // antes; `motion_policy: axial` faz o drone girar e so entao avancar.
+    // COMO ir de um waypoint ao outro e escolha da missao: ver motion.hpp.
     politica_ = stdstates::criarPolitica(blackboard, drone_);
     if (politica_ == nullptr) return;
     limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
@@ -106,16 +104,14 @@ protected:
       return "WAYPOINTS ENDED";
     }
 
-    // Waypoint novo: avisa a politica, que precisa saber para recomecar do
-    // giro em vez de continuar avancando na proa antiga.
+    // Waypoint novo: a politica recomeca do giro, e nao da proa antiga.
     if (goal_point != ultimo_alvo_) {
       politica_->iniciar(goal_point->coordinates, yaw_);
       ultimo_alvo_ = goal_point;
     }
 
-    // O deslocamento inteiro passa pela politica. Este era o maior gerador de
-    // movimento lateral do workspace: o passo ia em linha reta ate o waypoint,
-    // com o yaw congelado -- ou seja, de lado sempre que a rota virava.
+    // Era o maior gerador de movimento lateral do workspace: passo em linha
+    // reta com o yaw congelado, ou seja, de lado sempre que a rota virava.
     if (politica_->irPara(drone_, goal_point->coordinates, yaw_, limites_)) {
       const Eigen::Vector3d pos = drone_->getLocalPosition();
       goal_point->is_visited = true;
@@ -139,8 +135,7 @@ protected:
   std::shared_ptr<Drone> drone_;
   std::vector<ArenaPoint> * waypoints_ = nullptr;
   float tolerance_ = 0.0f;
-  // Continua sendo lido do YAML e continua obrigatorio, mas quem o usa agora e
-  // a politica, via limites_.passo. Ver stdstates/motion.hpp sobre o nome.
+  // Continua obrigatorio, mas quem o usa e a politica, via limites_.passo.
   float max_velocity_ = 0.0f;
 
   std::unique_ptr<drone::MotionPolicy> politica_;

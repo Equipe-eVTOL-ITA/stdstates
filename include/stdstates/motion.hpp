@@ -2,17 +2,9 @@
 
 // stdstates::motion — a politica de movimento vinda da blackboard.
 //
-// Um helper so, para que todo estado que se desloca crie a politica do MESMO
-// jeito: lendo `motion_policy` do YAML, caindo no padrao quando a chave nao
-// existe, e recusando ALTO um nome que nao existe.
-//
-// POR QUE NAO CADA ESTADO LER A CHAVE POR CONTA
-//
-// Porque um deles esqueceria. E o modo de esquecer e silencioso: o estado
-// continuaria voando holonomico enquanto o YAML diz `axial`, e a missao teria
-// metade dos deslocamentos obedecendo a regra e metade nao. No dia em que a
-// regra for "so pode girar e ir para frente", "quase todos os estados" nao
-// serve de nada.
+// Um helper so, para que nenhum estado leia `motion_policy` por conta propria:
+// um deles esqueceria, e continuaria voando holonomico enquanto o YAML diz
+// axial -- em silencio.
 
 #include <memory>
 #include <string>
@@ -43,16 +35,9 @@ inline std::unique_ptr<drone::MotionPolicy> criarPolitica(
     return politica;
   }
 
-  // ANUNCIA A POLITICA EM USO, sempre.
-  //
-  // O estado de pouso ja dizia "Pouso EXPONENCIAL ..." no log, e foi assim que
-  // se descobriu, num voo em que a configuracao pedia outra coisa, que o
-  // arquivo carregado nao era o editado -- a missao de simulacao le o
-  // simulation.yaml, e a edicao tinha ido para o flight.yaml.
-  //
-  // O movimento nao dizia nada, e por isso a metade dele do mesmo engano ficou
-  // invisivel. Uma escolha que muda como o drone voa tem de aparecer no log:
-  // custa uma linha, e e a diferenca entre ver o problema e procura-lo.
+  // Anuncia a politica em uso. Uma escolha que muda como o drone voa tem de
+  // aparecer no log -- foi assim que se descobriu um YAML editado no arquivo
+  // errado (flight.yaml em vez de simulation.yaml).
   if (drone != nullptr) {
     drone->log(std::string("Movimento: ") + politica->nome());
   }
@@ -61,11 +46,8 @@ inline std::unique_ptr<drone::MotionPolicy> criarPolitica(
 
 /// Os limites de deslocamento que a missao declara.
 ///
-/// `passo` sai de `max_horizontal_velocity`, que e como os estados sempre o
-/// chamaram -- apesar de o valor NAO ser uma velocidade, e sim a distancia a
-/// que o setpoint e posto a frente. O nome ficou de 2025 e mudá-lo quebraria
-/// todos os YAML de todas as missoes; o que se pode fazer e dizer aqui o que
-/// ele e de fato.
+/// `passo` sai de `max_horizontal_velocity`, que NAO e uma velocidade e sim a
+/// distancia a que o setpoint e posto a frente. O nome ficou de 2025.
 inline drone::Limites limitesDaBlackboard(
   fsm::Blackboard & blackboard, float tolerancia_posicao)
 {

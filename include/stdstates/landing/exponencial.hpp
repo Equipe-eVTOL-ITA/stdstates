@@ -1,22 +1,15 @@
 #pragma once
 
-// Exponencial — a descida exponencial, que e o pouso padrao do time.
+// Exponencial — o pouso padrao do time.
 //
 //     v(t) = v_max · e^(−t/τ),  limitado a [v_min, v_max]
 //     τ derivado de (v_max − v_min) / (altura_de_partida − altura_da_base)
 //
-// A ideia boa de 2025, mantida: nada de numero magico. Mudar a altura no YAML
-// reajusta o perfil inteiro e o timeout sozinho.
+// Nada de numero magico: mudar a altura no YAML reajusta o perfil e o timeout.
+// Matematica movida do PrecisionLandingState sem mudanca de comportamento.
 //
-// Este arquivo e a matematica que estava dentro do PrecisionLandingState,
-// movida para ca SEM MUDANCA DE COMPORTAMENTO -- de proposito. Uma missao que
-// nao declara `landing_mode` continua pousando exatamente como antes, e essa e
-// a unica forma de saber que a extracao nao introduziu nada.
-//
-//   entrada  "landing_velocity_max"  float  (positivo, m/s, descida)
-//            "landing_velocity_min"  float
-//            "max_base_height"       float  (FRD, negativo -- ver alturaDaBase)
-//   opcional "landing_timeout"       float  (folga em s; padrao 5)
+//   entrada  landing_velocity_max/min, max_base_height
+//   opcional landing_timeout (folga em s; padrao 5)
 //
 // A altura de PARTIDA nao e parametro: e medida ao entrar no estado.
 
@@ -44,10 +37,8 @@ public:
     float max_base_height = 0.0f;
     if (!stdstates::require(blackboard, drone, "max_base_height", max_base_height)) {return false;}
 
-    // GUARDAS QUE 2025 NAO TINHA. Sem elas, uma queda nula divide por zero e
-    // produz tau = inf; um v_min de 0 produz log(inf). Nos dois casos o drone
-    // desce com velocidade NaN, que o PX4 rejeita silenciosamente -- ele
-    // simplesmente fica parado no ar ate alguem desistir e desarmar.
+    // Sem estas guardas, uma queda nula da tau = inf e a descida vira NaN, que
+    // o PX4 rejeita em silencio: o drone fica parado no ar.
     if (v_min_ <= 0.0f || v_max_ <= v_min_) {
       drone->log(
         "ERRO: velocidades de pouso incoerentes (max=" + std::to_string(v_max_) +
@@ -55,18 +46,8 @@ public:
       return false;
     }
 
-    // A ALTURA DE PARTIDA E SEMPRE A ATUAL, MEDIDA AGORA.
-    //
-    // A primeira versao lia `align_height` do YAML, porque foi portada da fase
-    // 1, onde o alinhamento sempre leva o drone a mesma altitude antes de
-    // pousar. La o valor de config e a altura real quase coincidem -- mas nem
-    // la sao iguais, porque o alinhamento ja desce um pouco enquanto converge.
-    //
-    // Em geral nao coincidem nem de longe: na fase 3 o drone pousa de onde o
-    // operador o deixou por gesto, que e qualquer altura. Um valor fixo faria o
-    // perfil ser calculado para uma queda que nao existe -- curto demais, o
-    // drone chega ao solo ainda rapido; longo demais, fica parado no ar
-    // esperando um tempo que nao passa.
+    // Altura de partida SEMPRE medida agora, e nunca lida do YAML: na fase 3 o
+    // drone pousa de onde o gesto o deixou, que e qualquer altura.
     const float altura_atual = -static_cast<float>(drone->getLocalPosition().z());
     const float altura_alvo = alturaDaBase(max_base_height, drone);
 
@@ -76,10 +57,8 @@ public:
     const float queda = altura_atual - altura_alvo;
 
     if (queda <= 0.0f) {
-      // O drone ja esta na altura do alvo ou abaixo dela. Nao e erro: com
-      // controle por gesto o operador pode descer ate quase encostar e so
-      // entao mandar pousar. Abortar aqui deixaria o drone pairando a 20 cm do
-      // chao sem explicacao.
+      // Nao e erro: por gesto da para descer ate quase encostar antes de
+      // mandar pousar.
       decay_rate_ = 1.0f;                     // irrelevante: ja saturado em v_min
       timeout_s_ = altura_atual / v_min_ + margem;
       drone->log(

@@ -1,31 +1,16 @@
 #pragma once
 
-// SCurve — descida com perfil em S, sem solavanco no inicio nem no fim.
+// SCurve — descida em S, sem o degrau de aceleracao do primeiro tick.
 //
-// POR QUE UMA ALTERNATIVA A EXPONENCIAL
+// A exponencial comeca em v_max de uma vez, e o PX4 responde com um mergulho
+// seguido de correcao -- que numa camera apontada para baixo aparece como a
+// base saindo e voltando ao quadro.
 //
-// A exponencial comeca em v_max NO PRIMEIRO TICK: o drone vem pairando a 0 m/s
-// e recebe, de uma vez, "desca a 0,5 m/s". O degrau esta na aceleracao, e o
-// controlador do PX4 responde com um mergulho seguido de correcao -- que numa
-// camera apontada para baixo aparece como a base saindo e voltando ao quadro
-// justo quando o alinhamento acabou de convergir.
+//     s(x) = 3x² − 2x³                    (smoothstep: s'(0) = s'(1) = 0)
+//     v(t) = v_min + (v_max − v_min)·(1 − s(t/T))
+//     T    = queda / ((v_max + v_min)/2)  (resolvido: ∫₀¹ s = 1/2)
 //
-// O perfil em S sai de v_max e chega a v_min com DERIVADA NULA nas duas
-// pontas. A funcao e o smoothstep classico:
-//
-//     s(x) = 3x² − 2x³        s(0)=0, s(1)=1, s'(0)=s'(1)=0
-//     v(t) = v_min + (v_max − v_min) · (1 − s(t/T))
-//
-// O T NAO E ARBITRADO, e sim resolvido para cobrir a queda exatamente.
-// Como ∫₀¹ s(x) dx = 1/2, a velocidade media do perfil e (v_max + v_min)/2, e:
-//
-//     T = queda / ((v_max + v_min) / 2)
-//
-// Passado T, mantem v_min ate o timeout -- igual a exponencial, e pela mesma
-// razao: o ultimo trecho ate encostar tem de ser lento.
-//
-// Mesmos parametros da exponencial. Trocar entre as duas e trocar
-// `landing_mode` no YAML.
+// Passado T, mantem v_min ate o timeout. Mesmos parametros da exponencial.
 
 #include <algorithm>
 #include <cmath>
@@ -66,8 +51,7 @@ public:
     const float queda = altura_atual - altura_alvo;
 
     if (queda <= 0.0f) {
-      // Ja na altura do alvo ou abaixo: nao ha rampa a fazer. Mesmo tratamento
-      // da exponencial, e pela mesma razao.
+      // Ja na altura do alvo ou abaixo: nao ha rampa a fazer.
       t_rampa_ = 0.0;
       timeout_s_ = altura_atual / v_min_ + margem;
       drone->log(

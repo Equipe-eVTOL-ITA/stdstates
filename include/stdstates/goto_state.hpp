@@ -28,9 +28,7 @@ public:
         
         tolerance_ = *blackboard.get<float>("position_tolerance");
 
-        // COMO chegar ao destino e escolha da missao. O padrao reproduz o que
-        // este estado fazia antes; `motion_policy: axial` faz o drone girar e
-        // so entao avancar.
+        // COMO chegar e escolha da missao: ver stdstates/motion.hpp.
         politica_ = stdstates::criarPolitica(blackboard, drone_);
         if (politica_ != nullptr) {
             limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
@@ -57,9 +55,7 @@ public:
             return "ARRIVED";
         }
 
-        // Todo o deslocamento passa pela politica. Antes era um setpoint
-        // direto no destino: em linha reta, e de lado sempre que o destino
-        // estivesse de lado.
+        // Todo o deslocamento passa pela politica.
         politica_->irPara(
             drone_,
             Eigen::Vector3d(target_x_, target_y_, target_z_),
