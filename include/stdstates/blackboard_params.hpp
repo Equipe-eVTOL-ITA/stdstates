@@ -28,6 +28,22 @@
 #include "fsm/fsm.hpp"
 #include "drone/Drone.hpp"
 
+// >>> CONTRATO taxas.fsm-e-pid
+// A FSM roda a 20 Hz -- timer de 50 ms, em toda missao. E o relogio mestre do
+// sistema: os setpoints para o PX4 saem nessa taxa, porque o Drone so publica
+// quando um estado manda.
+//
+// O sample_time dos PIDs e 0,04 s, e NAO 0,05. Nao e arredondamento: o
+// PidController::compute() devolve 0.0f -- e nao o ultimo valor -- quando
+// chamado antes de sample_time ter passado. Com os dois iguais, qualquer
+// jitter do escalonador produz zeros intermitentes na saida do controle, que
+// aparecem como um drone "engasgando" e se confundem com PID mal sintonizado.
+// 0,04 s da 20% de folga.
+//
+// Outras taxas do sistema: telemetria de posicao 20 Hz, status 2 Hz,
+// system_health 1 Hz, cameras 8-20 Hz conforme o no.
+// <<< CONTRATO
+
 namespace stdstates {
 
 /// Lê um parâmetro obrigatório. Devolve false e registra no log qual chave

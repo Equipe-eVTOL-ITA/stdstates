@@ -29,6 +29,25 @@
 #include "stdstates/landing/px4_land.hpp"
 #include "stdstates/landing/s_curve.hpp"
 
+// >>> CONTRATO pouso.modos
+// A abordagem de pouso e uma chave de YAML, e nao codigo:
+//
+//     landing_mode: exponencial   # padrao -- v(t) = v_max·e^(-t/tau)
+//     landing_mode: px4           # o modo LAND do firmware; TIRA de offboard
+//                                 #   e DESARMA; ignora landing_velocity_*
+//     landing_mode: s_curve       # perfil em S, sem solavanco nas pontas
+//
+// Parametros do exponencial e do s_curve: landing_velocity_max/min,
+// max_base_height, landing_timeout (folga, padrao 5 s).
+// Parametros do px4: disarm_grace (3 s), disarm_timeout (20 s).
+//
+// max_base_height deveria ser NEGATIVO (FRD, para cima e negativo). Metade do
+// workspace escreve positivo; os dois sao aceitos, a magnitude e usada, e sai
+// um aviso no log da missao.
+//
+// A altura de PARTIDA nunca e parametro: e medida ao entrar no estado.
+// <<< CONTRATO
+
 namespace stdstates::landing
 {
 
