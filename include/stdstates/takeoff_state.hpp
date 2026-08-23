@@ -27,6 +27,23 @@
  *   2. Moves toward the target altitude at clamped velocity
  *   3. Maintains initial XY position and yaw
  */
+// >>> CONTRATO px4.reancoragem-do-home
+// setHomePosition() REANCORA o referencial do mundo na posicao e no yaw atuais.
+// Use TakeoffState(true) SO na decolagem inicial da missao.
+//
+// Numa redecolagem no meio da missao ela e destrutiva: a origem do mundo pula
+// para onde o drone estiver, e tudo o que estava guardado em coordenadas de
+// mundo -- bases ja visitadas, a grade de varredura, a posicao de casa --
+// passa a se referir a um referencial que nao existe mais.
+//
+// Nao ha erro. O drone decola, olha para baixo, ve a base em que acabou de
+// pousar, nao a reconhece, e pousa nela de novo. E de novo.
+//
+// Medido em SITL: o NED cru do PX4 ficou em (3.417, -0.159) o ciclo inteiro --
+// o drone nunca saiu do lugar -- enquanto o FRD visto pela missao saltava de
+// (-0.16, -3.03) para (0.00, 0.03) a cada redecolagem.
+// <<< CONTRATO
+
 class TakeoffState : public fsm::State {
 public:
     /// @param set_home  Se true, reancora o referencial FRD na posicao atual

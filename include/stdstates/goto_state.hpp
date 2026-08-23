@@ -8,6 +8,8 @@
 #include "fsm/fsm.hpp"
 #include "drone/Drone.hpp"
 
+#include "stdstates/motion.hpp"
+
 class GoToState : public fsm::State {
 public:
     GoToState() : fsm::State() {}
@@ -25,11 +27,20 @@ public:
         target_yaw_ = *blackboard.get<float>("target_yaw");
         
         tolerance_ = *blackboard.get<float>("position_tolerance");
+
+        // COMO chegar e escolha da missao: ver stdstates/motion.hpp.
+        politica_ = stdstates::criarPolitica(blackboard, drone_);
+        if (politica_ != nullptr) {
+            limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
+            politica_->iniciar(
+                Eigen::Vector3d(target_x_, target_y_, target_z_), target_yaw_);
+        }
     }
 
     std::string act(fsm::Blackboard &blackboard) override {
         (void)blackboard;
         if (drone_ == nullptr) return "ERROR";
+        if (politica_ == nullptr) return "ERROR";
 
         Eigen::Vector3d pos = drone_->getLocalPosition();
         
@@ -44,14 +55,19 @@ public:
             return "ARRIVED";
         }
 
-        // Send position target
-        drone_->setLocalPosition(target_x_, target_y_, target_z_, target_yaw_);
+        // Todo o deslocamento passa pela politica.
+        politica_->irPara(
+            drone_,
+            Eigen::Vector3d(target_x_, target_y_, target_z_),
+            target_yaw_, limites_);
 
         return "";
     }
 
 private:
     std::shared_ptr<Drone> drone_;
+    std::unique_ptr<drone::MotionPolicy> politica_;
+    drone::Limites limites_;
     float target_x_, target_y_, target_z_, target_yaw_;
     float tolerance_;
 };

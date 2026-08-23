@@ -35,6 +35,7 @@
 #include "drone/Drone.hpp"
 
 #include "stdstates/blackboard_params.hpp"
+#include "stdstates/motion.hpp"
 
 class ReturnHomeState : public fsm::State
 {
@@ -97,6 +98,12 @@ public:
       "Casa a " + std::to_string(distancia) + " m; timeout " +
       std::to_string(timeout_s_) + " s");
 
+    // COMO voltar e escolha da missao: ver stdstates/motion.hpp.
+    politica_ = stdstates::criarPolitica(blackboard, drone_);
+    if (politica_ == nullptr) {return;}
+    limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
+    politica_->iniciar(goal_, yaw_);
+
     start_time_ = std::chrono::steady_clock::now();
     ok_ = true;
   }
@@ -125,10 +132,12 @@ public:
 
       if (diff.norm() < tolerance_) {
         over_home_ = true;
+        // Destino novo: a politica axial precisa reavaliar a proa.
+        politica_->iniciar(goal_, yaw_);
         drone_->log("Sobre a casa; iniciando descida.");
         return "";
       }
-      step(pos, diff);
+      politica_->irPara(drone_, horizontal_goal, yaw_, limites_);
       return "";
     }
 
@@ -139,7 +148,7 @@ public:
       drone_->log("Em casa.");
       return "AT HOME";
     }
-    step(pos, diff);
+    politica_->irPara(drone_, goal_, yaw_, limites_);
     return "";
   }
 
@@ -149,15 +158,9 @@ private:
   static constexpr double kFatorDeFolga = 3.0;
   static constexpr double kMargemFixaS = 10.0;
 
-  void step(const Eigen::Vector3d & pos, const Eigen::Vector3d & diff)
-  {
-    const Eigen::Vector3d d =
-      diff.norm() > max_velocity_ ? diff.normalized() * max_velocity_ : diff;
-    const Eigen::Vector3d little_goal = pos + d;
-    drone_->setLocalPosition(little_goal.x(), little_goal.y(), little_goal.z(), yaw_);
-  }
-
   std::shared_ptr<Drone> drone_;
+  std::unique_ptr<drone::MotionPolicy> politica_;
+  drone::Limites limites_;
   Eigen::Vector3d goal_ = Eigen::Vector3d::Zero();
   float max_velocity_ = 0.0f;
   float tolerance_ = 0.0f;
