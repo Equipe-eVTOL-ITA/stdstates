@@ -35,9 +35,26 @@ inline std::unique_ptr<drone::MotionPolicy> criarPolitica(
     blackboard, "motion_policy", drone::kPoliticaPadrao);
 
   auto politica = drone::criarPolitica(nome);
-  if (politica == nullptr && drone != nullptr) {
-    drone->log("ERRO: motion_policy desconhecida: '" + nome + "'.");
-    drone->log("      Politicas aceitas: " + drone::politicasDisponiveis());
+  if (politica == nullptr) {
+    if (drone != nullptr) {
+      drone->log("ERRO: motion_policy desconhecida: '" + nome + "'.");
+      drone->log("      Politicas aceitas: " + drone::politicasDisponiveis());
+    }
+    return politica;
+  }
+
+  // ANUNCIA A POLITICA EM USO, sempre.
+  //
+  // O estado de pouso ja dizia "Pouso EXPONENCIAL ..." no log, e foi assim que
+  // se descobriu, num voo em que a configuracao pedia outra coisa, que o
+  // arquivo carregado nao era o editado -- a missao de simulacao le o
+  // simulation.yaml, e a edicao tinha ido para o flight.yaml.
+  //
+  // O movimento nao dizia nada, e por isso a metade dele do mesmo engano ficou
+  // invisivel. Uma escolha que muda como o drone voa tem de aparecer no log:
+  // custa uma linha, e e a diferenca entre ver o problema e procura-lo.
+  if (drone != nullptr) {
+    drone->log(std::string("Movimento: ") + politica->nome());
   }
   return politica;
 }
