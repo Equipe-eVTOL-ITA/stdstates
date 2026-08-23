@@ -8,6 +8,8 @@
 #include "fsm/fsm.hpp"
 #include "drone/Drone.hpp"
 
+#include "stdstates/motion.hpp"
+
 class GoToState : public fsm::State {
 public:
     GoToState() : fsm::State() {}
@@ -25,11 +27,22 @@ public:
         target_yaw_ = *blackboard.get<float>("target_yaw");
         
         tolerance_ = *blackboard.get<float>("position_tolerance");
+
+        // COMO chegar ao destino e escolha da missao. O padrao reproduz o que
+        // este estado fazia antes; `motion_policy: axial` faz o drone girar e
+        // so entao avancar.
+        politica_ = stdstates::criarPolitica(blackboard, drone_);
+        if (politica_ != nullptr) {
+            limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
+            politica_->iniciar(
+                Eigen::Vector3d(target_x_, target_y_, target_z_), target_yaw_);
+        }
     }
 
     std::string act(fsm::Blackboard &blackboard) override {
         (void)blackboard;
         if (drone_ == nullptr) return "ERROR";
+        if (politica_ == nullptr) return "ERROR";
 
         Eigen::Vector3d pos = drone_->getLocalPosition();
         
@@ -44,14 +57,21 @@ public:
             return "ARRIVED";
         }
 
-        // Send position target
-        drone_->setLocalPosition(target_x_, target_y_, target_z_, target_yaw_);
+        // Todo o deslocamento passa pela politica. Antes era um setpoint
+        // direto no destino: em linha reta, e de lado sempre que o destino
+        // estivesse de lado.
+        politica_->irPara(
+            drone_,
+            Eigen::Vector3d(target_x_, target_y_, target_z_),
+            target_yaw_, limites_);
 
         return "";
     }
 
 private:
     std::shared_ptr<Drone> drone_;
+    std::unique_ptr<drone::MotionPolicy> politica_;
+    drone::Limites limites_;
     float target_x_, target_y_, target_z_, target_yaw_;
     float tolerance_;
 };

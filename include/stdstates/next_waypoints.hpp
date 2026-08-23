@@ -13,6 +13,7 @@
 //             "position_tolerance"  float
 //             "max_horizontal_velocity" float
 //   opcional  "waypoint_yaw"        float  (padrão: yaw ao entrar no estado)
+//   opcional  "motion_policy"       std::string  "holonomica" (padrão) | "axial"
 //
 // Outcomes: ""  (ainda percorrendo)
 //           "WAYPOINTS ENDED"  (todos visitados)
@@ -34,6 +35,7 @@
 
 #include "stdstates/arena_point.hpp"
 #include "stdstates/blackboard_params.hpp"
+#include "stdstates/motion.hpp"
 
 class WaypointListState : public fsm::State
 {
@@ -72,6 +74,13 @@ public:
     yaw_ = stdstates::optional<float>(
       blackboard, "waypoint_yaw", static_cast<float>(drone_->getOrientation()[2]));
 
+    // COMO o drone vai de um waypoint ao outro e escolha da missao, e nao
+    // deste estado. O padrao reproduz exatamente o que este codigo fazia
+    // antes; `motion_policy: axial` faz o drone girar e so entao avancar.
+    politica_ = stdstates::criarPolitica(blackboard, drone_);
+    if (politica_ == nullptr) return;
+    limites_ = stdstates::limitesDaBlackboard(blackboard, tolerance_);
+
     ok_ = true;
   }
 
@@ -97,26 +106,23 @@ protected:
       return "WAYPOINTS ENDED";
     }
 
-    const Eigen::Vector3d pos = drone_->getLocalPosition();
-    const Eigen::Vector3d diff = goal_point->coordinates - pos;
+    // Waypoint novo: avisa a politica, que precisa saber para recomecar do
+    // giro em vez de continuar avancando na proa antiga.
+    if (goal_point != ultimo_alvo_) {
+      politica_->iniciar(goal_point->coordinates, yaw_);
+      ultimo_alvo_ = goal_point;
+    }
 
-    if (diff.norm() < tolerance_) {
+    // O deslocamento inteiro passa pela politica. Este era o maior gerador de
+    // movimento lateral do workspace: o passo ia em linha reta ate o waypoint,
+    // com o yaw congelado -- ou seja, de lado sempre que a rota virava.
+    if (politica_->irPara(drone_, goal_point->coordinates, yaw_, limites_)) {
+      const Eigen::Vector3d pos = drone_->getLocalPosition();
       goal_point->is_visited = true;
       drone_->log(
         "Waypoint visitado: {" + std::to_string(pos.x()) + ", " +
         std::to_string(pos.y()) + ", " + std::to_string(pos.z()) + "}");
-      return "";
     }
-
-    // Passo de comprimento limitado em vez do alvo final: manda o drone para um
-    // ponto próximo, o que faz o controlador do PX4 produzir uma velocidade
-    // aproximadamente constante em vez de acelerar ao máximo em direção a um
-    // alvo distante.
-    const Eigen::Vector3d step =
-      diff.norm() > max_velocity_ ? diff.normalized() * max_velocity_ : diff;
-    const Eigen::Vector3d little_goal = pos + step;
-
-    drone_->setLocalPosition(little_goal.x(), little_goal.y(), little_goal.z(), yaw_);
     return "";
   }
 
@@ -133,7 +139,14 @@ protected:
   std::shared_ptr<Drone> drone_;
   std::vector<ArenaPoint> * waypoints_ = nullptr;
   float tolerance_ = 0.0f;
+  // Continua sendo lido do YAML e continua obrigatorio, mas quem o usa agora e
+  // a politica, via limites_.passo. Ver stdstates/motion.hpp sobre o nome.
   float max_velocity_ = 0.0f;
+
+  std::unique_ptr<drone::MotionPolicy> politica_;
+  drone::Limites limites_;
+  /// Qual waypoint a politica esta perseguindo, para saber quando reiniciá-la.
+  const ArenaPoint * ultimo_alvo_ = nullptr;
   float yaw_ = 0.0f;
   bool ok_ = false;
 };
