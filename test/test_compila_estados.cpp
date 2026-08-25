@@ -258,6 +258,24 @@ TEST(ModosDePouso, AlturaDaBaseAceitaOsDoisSinais)
   EXPECT_FLOAT_EQ(stdstates::landing::alturaDaBase(0.0f, nullptr), 0.0f);
 }
 
+TEST(ModosDePouso, OsDoisEstadosDePousoLeemOMesmoLandingMode)
+{
+  // A fase 3 pousa por gesto (PrecisionLanding) E no fim da missao
+  // (LandAndDisarm). Enquanto o segundo era fixo no modo LAND do PX4, uma
+  // missao com `landing_mode: s_curve` pousava em S no meio e em LAND no fim
+  // -- duas abordagens no mesmo voo, sem ninguem ter pedido.
+  std::vector<std::unique_ptr<fsm::State>> estados;
+  estados.push_back(std::make_unique<PrecisionLandingState>());
+  estados.push_back(std::make_unique<LandAndDisarmState>());
+  // E os dois aceitam fixar a abordagem no codigo, para a fase cuja regra
+  // exige um pouso especifico.
+  estados.push_back(std::make_unique<PrecisionLandingState>(std::string("px4")));
+  estados.push_back(std::make_unique<LandAndDisarmState>(std::string("px4")));
+  for (const auto & e : estados) {
+    EXPECT_NE(e, nullptr);
+  }
+}
+
 TEST(ModosDePouso, LandingStateEPrecisionLandingSaoAMesmaImplementacao)
 {
   // Eram duas copias da mesma conta, e o bug de truncamento sobreviveu a
