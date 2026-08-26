@@ -33,6 +33,7 @@
 #include "stdstates/land_and_disarm_state.hpp"
 #include "stdstates/landing_state.hpp"
 #include "stdstates/landing/registro.hpp"
+#include "stdstates/takeoff/registro.hpp"
 #include "stdstates/motion.hpp"
 #include "stdstates/goto_state.hpp"
 
@@ -345,4 +346,60 @@ TEST(PoliticaDeMovimento, OsEstadosQueSeDeslocamAExigem)
   estados.push_back(std::make_unique<ReturnHomeState>());
   estados.push_back(std::make_unique<GoToState>());
   EXPECT_EQ(estados.size(), 3u);
+}
+
+
+// --- Modos de decolagem -----------------------------------------------------
+
+TEST(ModosDeDecolagem, TodoModoAnunciadoPodeSerConstruido)
+{
+  const auto nomes = stdstates::takeoff::modos();
+  ASSERT_FALSE(nomes.empty());
+  for (const auto & nome : nomes) {
+    auto e = stdstates::takeoff::criar(nome);
+    EXPECT_NE(e, nullptr) << "modos() anuncia '" << nome << "', que criar() nao constroi";
+    if (e != nullptr) {
+      EXPECT_STREQ(e->nome(), nome.c_str());
+    }
+  }
+}
+
+TEST(ModosDeDecolagem, ModoDesconhecidoDevolveNullptr)
+{
+  // Cair no padrao faria o drone decolar de um jeito que ninguem pediu, com o
+  // YAML dizendo outra coisa.
+  EXPECT_EQ(stdstates::takeoff::criar("stdtakeof"), nullptr);
+  EXPECT_EQ(stdstates::takeoff::criar(""), nullptr);
+  EXPECT_EQ(stdstates::takeoff::criar("TAKEOFF"), nullptr);
+}
+
+TEST(ModosDeDecolagem, OPadraoEOStdTakeoff)
+{
+  // Quem nao declara `takeoff_mode` decola como antes desta camada.
+  auto e = stdstates::takeoff::criar(stdstates::takeoff::kModoPadrao);
+  ASSERT_NE(e, nullptr);
+  EXPECT_STREQ(e->nome(), "stdtakeoff");
+}
+
+TEST(ModosDeDecolagem, OOutcomeDeSucessoNaoMudou)
+{
+  // "TAKEOFF COMPLETED" e o que TODAS as missoes ja esperam nas transicoes.
+  // Mudar essa string quebraria todas elas de uma vez, sem erro de compilacao.
+  EXPECT_STREQ(stdstates::takeoff::kDecolou, "TAKEOFF COMPLETED");
+  EXPECT_STREQ(stdstates::takeoff::kSeguir, "");
+  EXPECT_STREQ(stdstates::takeoff::kErro, "ERROR");
+}
+
+TEST(ModosDeDecolagem, ATakeoffStateAceitaAsFormasDeConstrucao)
+{
+  // A reancoragem do referencial e ORTOGONAL a abordagem: as duas dimensoes
+  // combinam livremente.
+  std::vector<std::unique_ptr<fsm::State>> estados;
+  estados.push_back(std::make_unique<TakeoffState>());                        // inicial, YAML
+  estados.push_back(std::make_unique<TakeoffState>(false));                   // redecolagem, YAML
+  estados.push_back(std::make_unique<TakeoffState>(true, std::string("px4")));
+  estados.push_back(std::make_unique<TakeoffState>(false, std::string("stdtakeoff")));
+  for (const auto & e : estados) {
+    EXPECT_NE(e, nullptr);
+  }
 }
